@@ -42,25 +42,34 @@ A zero-dependency patcher and launcher suite that makes both games from the 2000
 
 ## Requirements
 
-- **Windows 10 or Windows 11** (built-in .NET Framework 4.x `csc.exe` is used automatically — no Visual Studio required).
-- **Python 3.8+** (standard library only — **zero `pip` packages required**).
+- **Windows 10 or Windows 11**.
 - Your own **King of the Hill (2000) PC CD-ROM** or extracted **ISO** folder containing `AUTORUN.EXE`, `HOOT\`, and `HUNT\`.
+- *(Optional, only if running from source)*: **Python 3.8+** (standard library only — **zero `pip` packages required**). If using the prebuilt `KOTH_Patcher.exe` from Releases, Python is **not** required.
 
 ---
 
 ## How to Use
 
-### Option 1: Double-Click (`apply_patch.bat`)
+### Option 1: Standalone Binary (Recommended — No Python needed)
+1. Download **`KOTH_Patcher.exe`** (or `KingOfTheHill-PC-Patch-v0.2.0.zip`) from [GitHub Releases](https://github.com/VrilDox-Coluan/KingOfTheHill-PC-Patch/releases).
+2. Insert your *King of the Hill* CD-ROM or mount your ISO.
+3. Run `KOTH_Patcher.exe`.
+   - It automatically scans for your CD-ROM / ISO drive. Press **Enter** to confirm.
+   - Enter your preferred destination folder (defaults to `C:\Games\KingOfTheHill`).
+   - Done!
+4. Launch the games using the generated batch files:
+   - **Hootenanny**: `HOOT\Play_Hootenanny.bat` (Fullscreen) or `HOOT\Play_Hootenanny_Windowed.bat` (Windowed)
+   - **Texas Huntin'**: `HUNT\Play_Texas_Hunting.bat` (Fullscreen) or `HUNT\Play_Texas_Hunting_Windowed.bat` (Windowed)
+
+### Option 2: Double-Click Batch (`apply_patch.bat`)
 1. Insert your *King of the Hill* CD-ROM, mount your `.iso`, or extract it to a folder (e.g., `C:\Games\KOTH`).
 2. Run **`apply_patch.bat`** (or drag-and-drop your CD-ROM / extracted ISO folder onto `apply_patch.bat`).
 3. When prompted:
    - Enter the path to your CD-ROM drive or extracted ISO folder (e.g. `D:\` or `C:\Games\KOTH`).
    - Optionally enter an output folder (if your source is a read-only CD-ROM/ISO, it will automatically copy the needed folders to `.\KOTH_Patched` and patch them there).
-4. Launch the games using the generated batch files:
-   - **Hootenanny**: `HOOT\Play_Hootenanny.bat` (Fullscreen) or `HOOT\Play_Hootenanny_Windowed.bat` (Windowed)
-   - **Texas Huntin'**: `HUNT\Play_Texas_Hunting.bat` (Fullscreen) or `HUNT\Play_Texas_Hunting_Windowed.bat` (Windowed)
+4. Launch the games via the generated batch files in `HOOT\` and `HUNT\`.
 
-### Option 2: Command Line (`patch_koth.py`)
+### Option 3: Command Line (`patch_koth.py`)
 ```powershell
 # Patch both games from a mounted CD-ROM/ISO into a writable folder:
 python patch_koth.py D:\ --out C:\Games\KOTH_Patched

@@ -31,3 +31,7 @@ KOTH_Patched/
 .build_tmp/
 __pycache__/
 *.pyc
+*.spec
+build/
+dist/
+release/

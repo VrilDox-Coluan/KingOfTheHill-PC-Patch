@@ -14,12 +14,22 @@ import argparse
 import os
 import re
 import shutil
+import string
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-SRC_DIR = SCRIPT_DIR / "src"
+VERSION = "0.2.0"
+
+if getattr(sys, "frozen", False):
+    BUNDLE_DIR = Path(sys._MEIPASS)
+    APP_DIR = Path(sys.executable).resolve().parent
+else:
+    BUNDLE_DIR = Path(__file__).resolve().parent
+    APP_DIR = BUNDLE_DIR
+
+SRC_DIR = BUNDLE_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 import build_winmm_proxy  # noqa: E402
 
@@ -199,6 +209,13 @@ def patch_lingo_ini(ini_path: Path, is_hoot: bool, dry_run=False):
 
 
 def compile_launcher(out_exe: Path, dry_run=False):
+    for candidate in (SRC_DIR / "KOTH_Launcher.exe", BUNDLE_DIR / "KOTH_Launcher.exe", APP_DIR / "KOTH_Launcher.exe"):
+        if candidate.is_file():
+            print(f"  [ok]   Using precompiled launcher ({candidate.name})")
+            if not dry_run:
+                shutil.copy2(candidate, out_exe)
+            return
+
     csc = find_csc()
     cs_src = SRC_DIR / "KOTH_Fullscreen_Launcher.cs"
     print(f"  [ok]   Compiling {out_exe.name} with {csc}")
@@ -432,18 +449,31 @@ def patch_hunt(work_root: Path, clean_stub: bytes, dlls: dict, winmm_proxy_bytes
     )
 
 
+def scan_for_cd():
+    for d in [f"{c}:\\" for c in string.ascii_uppercase[3:]] + [".", ".."]:
+        try:
+            p = Path(d).resolve()
+            if (p / "AUTORUN.EXE").is_file() and ((p / "HOOT").is_dir() or (p / "HUNT").is_dir()):
+                return p
+        except Exception:
+            pass
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Patch King of the Hill: Hootenanny & Texas Huntin' (2000 PC CD-ROM) for modern Windows."
+        description=f"King of the Hill: Hootenanny & Texas Huntin' Modern Compatibility Patch v{VERSION}"
     )
     parser.add_argument(
         "source",
+        nargs="?",
+        default=None,
         help="Path to the King of the Hill CD-ROM drive (e.g. D:\\) or extracted ISO directory containing AUTORUN.EXE, HOOT, and HUNT.",
     )
     parser.add_argument(
         "--out",
         default=None,
-        help="Optional writable output directory (required if source is a read-only CD-ROM/ISO mount; defaults to ./KOTH_Patched if source is read-only, or patches in-place if writable).",
+        help="Optional writable output directory (defaults to C:\\Games\\KingOfTheHill if source is read-only, or patches in-place if writable).",
     )
     parser.add_argument(
         "--game",
@@ -456,9 +486,33 @@ def main():
         action="store_true",
         help="Verify files and planned patches without writing any changes.",
     )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s v{VERSION}",
+    )
     args = parser.parse_args()
 
-    src_root = Path(args.source).resolve()
+    is_interactive = False
+    print("============================================================")
+    print(f" King of the Hill (2000) PC Compatibility Patch v{VERSION}")
+    print(" Supports: Hootenanny (HOOT) & Texas Huntin' (HUNT)")
+    print("============================================================\n")
+
+    if not args.source:
+        is_interactive = True
+        detected = scan_for_cd()
+        if detected:
+            resp = input(f"Detected King of the Hill CD at [{detected}].\nPress Enter to use it, or enter another path: ").strip().strip('"')
+            src_str = resp if resp else str(detected)
+        else:
+            src_str = input("Enter path to CD-ROM drive or extracted ISO directory: ").strip().strip('"')
+        if not src_str:
+            sys.exit("Aborted: no source provided.")
+        src_root = Path(src_str).resolve()
+    else:
+        src_root = Path(args.source).resolve()
+
     if not src_root.is_dir():
         sys.exit(f"ERROR: Source directory does not exist: {src_root}")
 
@@ -476,7 +530,12 @@ def main():
         if work_root != src_root:
             copy_cd_to_output(src_root, work_root, games, dry_run=args.dry_run)
     elif not is_writable_dir(src_root):
-        work_root = (SCRIPT_DIR / "KOTH_Patched").resolve()
+        if is_interactive:
+            default_out = Path(os.environ.get("SystemDrive", "C:") + r"\Games\KingOfTheHill")
+            resp = input(f"Destination folder for patched game [default: {default_out}]: ").strip().strip('"')
+            work_root = Path(resp).resolve() if resp else default_out
+        else:
+            work_root = (APP_DIR / "KingOfTheHill_Patched").resolve()
         print(f"[info] Source {src_root} is read-only (CD-ROM/ISO). Copying to {work_root} ...")
         copy_cd_to_output(src_root, work_root, games, dry_run=args.dry_run)
     else:
@@ -486,9 +545,8 @@ def main():
     clean_stub, dlls = extract_autorun_runtime(autorun_path)
 
     winmm_orig_path = find_syswow64_winmm()
-    tmp_build = SCRIPT_DIR / ".build_tmp"
-    if not args.dry_run:
-        tmp_build.mkdir(exist_ok=True)
+    tmp_build_obj = tempfile.TemporaryDirectory(prefix="koth_build_")
+    tmp_build = Path(tmp_build_obj.name)
     winmm_proxy_path = tmp_build / "WINMM.dll"
     launcher_exe = tmp_build / "KOTH_Fullscreen_Launcher.exe"
 
@@ -508,8 +566,7 @@ def main():
         if "hunt" in games:
             patch_hunt(work_root, clean_stub, dlls, winmm_proxy_bytes, winmm_orig_path, launcher_exe, dry_run=args.dry_run)
     finally:
-        if tmp_build.exists():
-            shutil.rmtree(tmp_build, ignore_errors=True)
+        tmp_build_obj.cleanup()
 
     print("\n============================================================")
     print("DONE! Your patched game files are ready in:")
@@ -521,6 +578,12 @@ def main():
         print(f"  - Texas Huntin' (Fullscreen): {work_root / 'HUNT' / 'Play_Texas_Hunting.bat'}")
         print(f"  - Texas Huntin' (Windowed):   {work_root / 'HUNT' / 'Play_Texas_Hunting_Windowed.bat'}")
     print("============================================================")
+
+    if is_interactive:
+        try:
+            input("\nPatch complete! Press Enter to exit...")
+        except (KeyboardInterrupt, EOFError):
+            pass
 
 
 if __name__ == "__main__":
